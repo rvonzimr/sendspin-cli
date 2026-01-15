@@ -70,6 +70,12 @@
           options.services.sendspin = {
             enable = lib.mkEnableOption "the sendspin daemon";
 
+            runAsUser = lib.mkOption {
+              type = with lib.types; nullOr str;
+              default = null;
+              description = "If set, run as a user service for this user instead of system service";
+            };
+
             clientName = lib.mkOption {
               type = lib.types.str;
               default = "rpi-sendspin-client";
@@ -80,7 +86,7 @@
               type = with lib.types; nullOr str;
               default = null;
               example = "1";
-              description = "Audio device for the sendspin daemon. see: list-audio-devices"; 
+              description = "Audio device for the sendspin daemon. see: list-audio-devices";
             };
 
             staticDelayMs = lib.mkOption {
@@ -92,7 +98,32 @@
 
           # Largely adapted from the repo's install script.
           config = lib.mkIf cfg.enable {
-            systemd.services.sendspin = {
+            systemd.user.services.sendspin = lib.mkIf (cfg.runAsUser != null) {
+              description = "Sendspin Daemon";
+              wantedBy = [ "default.target" ];
+              after = [ "network.target" "sound.target" ];
+              script = ''
+                exec ${self.packages.${pkgs.system}.default}/bin/sendspin daemon \
+                  ''${SENDSPIN_CLIENT_NAME:+--name "$SENDSPIN_CLIENT_NAME"} \
+                  ''${SENDSPIN_AUDIO_DEVICE:+--audio-device "$SENDSPIN_AUDIO_DEVICE"} \
+                  --static-delay-ms ''${SENDSPIN_STATIC_DELAY_MS:-0} \
+                  ''${SENDSPIN_ARGS}
+              '';
+              serviceConfig = {
+                Type = "simple";
+                Environment = [
+                  "SENDSPIN_CLIENT_NAME=${cfg.clientName}"
+                  "SENDSPIN_STATIC_DELAY_MS=${toString cfg.staticDelayMs}"
+                ]
+                ++ (lib.optional (cfg.audioDevice != null) "SENDSPIN_AUDIO_DEVICE=${cfg.audioDevice}");
+                Restart = "on-failure";
+                RestartSec = "10s";
+                StandardOutput = "journal";
+                StandardError = "journal";
+              };
+            };
+
+            systemd.services.sendspin = lib.mkIf (cfg.runAsUser == null) {
               description = "Sendspin Daemon";
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" "sound.target" ];
