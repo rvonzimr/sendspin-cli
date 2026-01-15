@@ -1,4 +1,4 @@
 build:
-    nix-build . -A CASetupUtility
+    nix-build . -A sendspin-cli
 install:
-    nix-env -i -f . -A CASetupUtility
+    nix-env -i -f . -A sendspin-cli
